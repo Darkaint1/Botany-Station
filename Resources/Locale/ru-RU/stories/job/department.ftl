@@ -1,0 +1,1 @@
+department-Prison = Космическая Тюрьма
