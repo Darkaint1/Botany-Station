@@ -30,7 +30,6 @@ public sealed partial class InstrumentSystem : SharedInstrumentSystem
     [Dependency] private readonly UserInterfaceSystem _bui = default!;
     [Dependency] private readonly PopupSystem _popup = default!;
     [Dependency] private readonly TransformSystem _transform = default!;
-    [Dependency] private readonly InteractionSystem _interactions = default!;
     [Dependency] private readonly ExamineSystemShared _examineSystem = default!;
 
     private const float MaxInstrumentBandRange = 10f;
@@ -226,7 +225,7 @@ public sealed partial class InstrumentSystem : SharedInstrumentSystem
     {
         var metadataQuery = EntityManager.GetEntityQuery<MetaDataComponent>();
 
-        if (Deleted(uid, metadataQuery))
+        if (Deleted(uid))
             return Array.Empty<(NetEntity, string)>();
 
         var list = new ValueList<(NetEntity, string)>();
@@ -381,7 +380,6 @@ public sealed partial class InstrumentSystem : SharedInstrumentSystem
         }
 
         var activeQuery = EntityManager.GetEntityQuery<ActiveInstrumentComponent>();
-        var metadataQuery = EntityManager.GetEntityQuery<MetaDataComponent>();
         var transformQuery = EntityManager.GetEntityQuery<TransformComponent>();
 
         var query = AllEntityQuery<ActiveInstrumentComponent, InstrumentComponent>();
@@ -389,7 +387,7 @@ public sealed partial class InstrumentSystem : SharedInstrumentSystem
         {
             if (instrument.Master is {} master)
             {
-                if (Deleted(master, metadataQuery))
+                if (Deleted(master))
                 {
                     Clean(uid, instrument);
                 }
@@ -402,7 +400,8 @@ public sealed partial class InstrumentSystem : SharedInstrumentSystem
 
                 var trans = transformQuery.GetComponent(uid);
                 var masterTrans = transformQuery.GetComponent(master);
-                if (!masterTrans.Coordinates.InRange(EntityManager, _transform, trans.Coordinates, 10f))
+                if (!_transform.InRange(masterTrans.Coordinates, trans.Coordinates, 10f)
+)
                 {
                     Clean(uid, instrument);
                 }

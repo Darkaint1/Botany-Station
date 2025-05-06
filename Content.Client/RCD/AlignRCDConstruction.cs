@@ -45,7 +45,7 @@ public sealed class AlignRCDConstruction : PlacementMode
         _unalignedMouseCoords = ScreenToCursorGrid(mouseScreen);
         MouseCoords = _unalignedMouseCoords.AlignWithClosestGridTile(SearchBoxSize, _entityManager, _mapManager);
 
-        var gridId = MouseCoords.GetGridUid(_entityManager);
+        var gridId = _transformSystem.GetGrid(MouseCoords);
 
         if (!_entityManager.TryGetComponent<MapGridComponent>(gridId, out var mapGrid))
             return;
@@ -75,7 +75,7 @@ public sealed class AlignRCDConstruction : PlacementMode
         if (!_entityManager.TryGetComponent<TransformComponent>(player, out var xform))
             return false;
 
-        if (!xform.Coordinates.InRange(_entityManager, _transformSystem, position, SharedInteractionSystem.InteractionRange))
+        if (!_transformSystem.InRange(xform.Coordinates, position, SharedInteractionSystem.InteractionRange))
         {
             InvalidPlaceColor = InvalidPlaceColor.WithAlpha(0);
             return false;
@@ -96,9 +96,11 @@ public sealed class AlignRCDConstruction : PlacementMode
         if (!_entityManager.TryGetComponent<RCDComponent>(heldEntity, out var rcd))
             return false;
 
-        // Retrieve the map grid data for the position
-        if (!_rcdSystem.TryGetMapGridData(position, out var mapGridData))
+        var gridUid = _transformSystem.GetGrid(position);
+        if (!_entityManager.TryGetComponent<MapGridComponent>(gridUid, out var mapGrid))
             return false;
+        var tile = _mapSystem.GetTileRef(gridUid.Value, mapGrid, position);
+        var posVector = _mapSystem.TileIndicesFor(gridUid.Value, mapGrid, position);
 
         // Determine if the user is hovering over a target
         var currentState = _stateManager.CurrentState;
@@ -106,10 +108,10 @@ public sealed class AlignRCDConstruction : PlacementMode
         if (currentState is not GameplayStateBase screen)
             return false;
 
-        var target = screen.GetClickedEntity(_unalignedMouseCoords.ToMap(_entityManager, _transformSystem));
+        var target = screen.GetClickedEntity(_transformSystem.ToMapCoordinates(_unalignedMouseCoords));
 
         // Determine if the RCD operation is valid or not
-        if (!_rcdSystem.IsRCDOperationStillValid(heldEntity.Value, rcd, mapGridData.Value, target, player.Value, false))
+        if (!_rcdSystem.IsRCDOperationStillValid(heldEntity.Value, rcd, gridUid.Value, mapGrid, tile, posVector, target, player.Value, false))
             return false;
 
         return true;

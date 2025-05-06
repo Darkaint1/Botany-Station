@@ -1,6 +1,7 @@
 using Content.Client.Stylesheets;
 using Content.Client.UserInterface.Controls;
 using Content.Shared.NameIdentifier;
+using Content.Shared.NameModifier.EntitySystems;
 using Content.Shared.Preferences;
 using Content.Shared.Silicons.Borgs;
 using Content.Shared.Silicons.Borgs.Components;
@@ -15,46 +16,25 @@ namespace Content.Client.Silicons.Borgs;
 public sealed partial class BorgMenu : FancyWindow
 {
     [Dependency] private readonly IEntityManager _entity = default!;
+    private readonly NameModifierSystem _nameModifier;
 
     public Action? BrainButtonPressed;
     public Action? EjectBatteryButtonPressed;
     public Action<string>? NameChanged;
     public Action<EntityUid>? RemoveModuleButtonPressed;
 
-    private readonly BorgChassisComponent? _chassis;
-    public readonly EntityUid Entity;
     public float AccumulatedTime;
     private string _lastValidName;
     private List<EntityUid> _modules = new();
 
-    public BorgMenu(EntityUid entity)
+    public EntityUid Entity;
+
+    public BorgMenu()
     {
         RobustXamlLoader.Load(this);
         IoCManager.InjectDependencies(this);
 
-        Entity = entity;
-
-        if (_entity.TryGetComponent<BorgChassisComponent>(Entity, out var chassis))
-            _chassis = chassis;
-
-        BorgSprite.SetEntity(entity);
-        ChargeBar.MaxValue = 1f;
-        ChargeBar.Value = 1f;
-
-        if (_entity.TryGetComponent<NameIdentifierComponent>(Entity, out var nameIdentifierComponent))
-        {
-            NameIdentifierLabel.Visible = true;
-            NameIdentifierLabel.Text = nameIdentifierComponent.FullIdentifier;
-
-            var fullName = _entity.GetComponent<MetaDataComponent>(Entity).EntityName;
-            var name = fullName.Substring(0, fullName.Length - nameIdentifierComponent.FullIdentifier.Length - 1);
-            NameLineEdit.Text = name;
-        }
-        else
-        {
-            NameIdentifierLabel.Visible = false;
-            NameLineEdit.Text = _entity.GetComponent<MetaDataComponent>(Entity).EntityName;
-        }
+        _nameModifier = _entity.System<NameModifierSystem>();
 
         _lastValidName = NameLineEdit.Text;
 
@@ -66,6 +46,25 @@ public sealed partial class BorgMenu : FancyWindow
         NameLineEdit.OnFocusExit += OnNameFocusExit;
 
         UpdateBrainButton();
+    }
+
+    public void SetEntity(EntityUid entity)
+    {
+        Entity = entity;
+        BorgSprite.SetEntity(entity);
+
+        if (_entity.TryGetComponent<NameIdentifierComponent>(Entity, out var nameIdentifierComponent))
+        {
+            NameIdentifierLabel.Visible = true;
+            NameIdentifierLabel.Text = nameIdentifierComponent.FullIdentifier;
+
+            NameLineEdit.Text = _nameModifier.GetBaseName(entity);
+        }
+        else
+        {
+            NameIdentifierLabel.Visible = false;
+            NameLineEdit.Text = _entity.GetComponent<MetaDataComponent>(Entity).EntityName;
+        }
     }
 
     protected override void FrameUpdate(FrameEventArgs args)
@@ -89,7 +88,7 @@ public sealed partial class BorgMenu : FancyWindow
 
     private void UpdateBrainButton()
     {
-        if (_chassis?.BrainEntity is { } brain)
+        if (_entity.TryGetComponent(Entity, out BorgChassisComponent? chassis) && chassis.BrainEntity is { } brain)
         {
             BrainButton.Text = _entity.GetComponent<MetaDataComponent>(brain).EntityName;
             BrainView.Visible = true;
@@ -108,17 +107,17 @@ public sealed partial class BorgMenu : FancyWindow
 
     private void UpdateModulePanel()
     {
-        if (_chassis == null)
+        if (!_entity.TryGetComponent(Entity, out BorgChassisComponent? chassis))
             return;
 
         ModuleCounter.Text = Loc.GetString("borg-ui-module-counter",
-            ("actual", _chassis.ModuleCount),
-            ("max", _chassis.MaxModules));
+            ("actual", chassis.ModuleCount),
+            ("max", chassis.MaxModules));
 
-        if (_chassis.ModuleContainer.Count == _modules.Count)
+        if (chassis.ModuleContainer.Count == _modules.Count)
         {
             var isSame = true;
-            foreach (var module in _chassis.ModuleContainer.ContainedEntities)
+            foreach (var module in chassis.ModuleContainer.ContainedEntities)
             {
                 if (_modules.Contains(module))
                     continue;
@@ -132,9 +131,10 @@ public sealed partial class BorgMenu : FancyWindow
 
         ModuleContainer.Children.Clear();
         _modules.Clear();
-        foreach (var module in _chassis.ModuleContainer.ContainedEntities)
+        foreach (var module in chassis.ModuleContainer.ContainedEntities)
         {
-            var control = new BorgModuleControl(module, _entity);
+            var moduleComponent = _entity.GetComponent<BorgModuleComponent>(module);
+            var control = new BorgModuleControl(module, _entity, !moduleComponent.DefaultModule);
             control.RemoveButtonPressed += () =>
             {
                 RemoveModuleButtonPressed?.Invoke(module);
